@@ -20,25 +20,50 @@ def _mysql_connect_params():
             "password": unquote(u.password or ""),
             "database": db,
         }
+    # 分项变量：兼容 Railway 常用名 MYSQLHOST / MYSQLUSER（无下划线）
+    host = (
+        os.environ.get("MYSQL_HOST")
+        or os.environ.get("MYSQLHOST")
+        or Config.MYSQL_HOST
+    )
+    port = int(
+        os.environ.get("MYSQL_PORT") or os.environ.get("MYSQLPORT") or "3306"
+    )
+    user = (
+        os.environ.get("MYSQL_USER")
+        or os.environ.get("MYSQLUSER")
+        or Config.MYSQL_USER
+    )
+    password = (
+        os.environ.get("MYSQL_PASSWORD")
+        or os.environ.get("MYSQLPASSWORD")
+        or Config.MYSQL_PASSWORD
+    )
+    database = (
+        os.environ.get("MYSQL_DATABASE")
+        or os.environ.get("MYSQLDATABASE")
+        or Config.MYSQL_DATABASE
+    )
+    if os.environ.get("RAILWAY_ENVIRONMENT") == "production" and host in (
+        "localhost",
+        "127.0.0.1",
+    ):
+        raise RuntimeError(
+            "Railway Web 正在连 localhost MySQL，说明未连上云数据库。"
+            "请在 Web 服务的 Variables 里：1) 添加 DATABASE_URL，值为 ${{MySQL.MYSQL_URL}}；"
+            "2) 删除 MYSQL_HOST=localhost、MYSQL_PASSWORD=your_mysql_password 等占位变量。"
+        )
     return {
-        "host": Config.MYSQL_HOST,
-        "port": int(os.environ.get("MYSQL_PORT", "3306")),
-        "user": Config.MYSQL_USER,
-        "password": Config.MYSQL_PASSWORD,
-        "database": Config.MYSQL_DATABASE,
+        "host": host,
+        "port": port,
+        "user": user,
+        "password": password,
+        "database": database,
     }
 
 
 def get_db_connection():
     p = _mysql_connect_params()
-    # MySQL 8 caching_sha2_password 在云环境常见，需允许取公钥
-    p["allow_public_key_retrieval"] = True
-    # Railway 等：若报 SSL 相关错，在 Web 服务 Variables 加 MYSQL_SSL_DISABLED=true
-    if os.environ.get("MYSQL_SSL_DISABLED", "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    ):
-        p["ssl_disabled"] = True
+    # 仅用 C 扩展支持的参数；勿传 allow_public_key_retrieval（会 AttributeError）。
+    # SSL：若需关闭，在 DATABASE_URL 上由平台配置，或查阅当前 mysql-connector 版本支持的 connect 参数。
     return mysql.connector.connect(**p)
