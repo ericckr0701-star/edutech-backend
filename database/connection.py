@@ -31,4 +31,14 @@ def _mysql_connect_params():
 
 def get_db_connection():
     p = _mysql_connect_params()
+    # MySQL 8 caching_sha2_password 在云环境常见，需允许取公钥
+    p["allow_public_key_retrieval"] = True
+    # Railway 等：若报 SSL 相关错，在 Web 服务 Variables 加 MYSQL_SSL_DISABLED=true
+    if os.environ.get("MYSQL_SSL_DISABLED", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    ):
+        p["ssl_disabled"] = True
     return mysql.connector.connect(**p)

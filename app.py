@@ -51,11 +51,15 @@ def create_app():
         with _db_init_lock:
             if _db_simple_schema_ready:
                 return
-            conn = get_db_connection()
             try:
-                init_simple_users_table(conn)
-            finally:
-                conn.close()
+                conn = get_db_connection()
+                try:
+                    init_simple_users_table(conn)
+                finally:
+                    conn.close()
+            except Exception:
+                app.logger.exception("init_simple_users_table failed")
+                return
             _db_simple_schema_ready = True
 
     @app.route("/register", methods=["POST"])
@@ -75,13 +79,15 @@ def create_app():
                 400,
             )
 
-        conn = get_db_connection()
+        conn = None
         try:
+            conn = get_db_connection()
             ok, err = try_register_user(conn, bcrypt, username, password)
             if not ok:
                 return jsonify({"status": "error", "message": err}), 400
             return jsonify({"status": "success"})
         except Exception:
+            app.logger.exception("register failed")
             return (
                 jsonify(
                     {
@@ -92,7 +98,8 @@ def create_app():
                 400,
             )
         finally:
-            conn.close()
+            if conn is not None:
+                conn.close()
 
     @app.route("/login", methods=["POST"])
     def login():
@@ -111,8 +118,9 @@ def create_app():
                 401,
             )
 
-        conn = get_db_connection()
+        conn = None
         try:
+            conn = get_db_connection()
             user = verify_login(conn, bcrypt, username, password)
             if not user:
                 return (
@@ -124,8 +132,15 @@ def create_app():
             session["username"] = user["username"]
             session["role"] = user.get("role", "student")
             return jsonify({"status": "success"})
+        except Exception:
+            app.logger.exception("login failed")
+            return (
+                jsonify({"status": "error", "message": "Invalid credentials"}),
+                401,
+            )
         finally:
-            conn.close()
+            if conn is not None:
+                conn.close()
 
     @app.route("/user", methods=["GET"])
     def get_user():
