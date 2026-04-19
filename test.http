@@ -1,0 +1,44 @@
+### 0. 说明
+# 先启动：python app.py
+# 下面按顺序测：1 注册 → 2 登录 → 3 用户信息（依赖登录 Cookie）
+# 若 3 报未登录：看 VS Code REST Client 是否勾选「保存 Cookie」或在登录响应里复制 Set-Cookie
+
+###
+
+### 1. 注册 POST /register
+POST http://127.0.0.1:5000/register
+Content-Type: application/json
+
+{
+    "username": "AndyStudent",
+    "password": "secret_password123"
+}
+
+###
+
+### 2. 登录 POST /login（会下发 Session Cookie）
+POST http://127.0.0.1:5000/login
+Content-Type: application/json
+
+{
+    "username": "AndyStudent",
+    "password": "secret_password123"
+}
+
+###
+
+### 3. 当前用户 GET /user（需与上一步同一「Cookie 环境」）
+GET http://127.0.0.1:5000/user
+
+###
+
+### 4. 文件上传 POST /upload（可选）
+# REST Client：若 multipart 失败，可用 Postman 选 form-data 字段名 file
+POST http://127.0.0.1:5000/upload
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="test.txt"
+
+hello world
+--boundary--
