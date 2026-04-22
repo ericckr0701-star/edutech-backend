@@ -339,6 +339,14 @@ function hydrateFromBootstrap(payload) {
       }
     });
   }
+  if (Array.isArray(d.saved_resources)) {
+    state.announcementSaved = {};
+    d.saved_resources.forEach((r) => {
+      if (String(r.resource_type || "") === "announcement") {
+        state.announcementSaved[String(r.resource_id || "")] = true;
+      }
+    });
+  }
   state.bootstrapLoaded = true;
 }
 
@@ -590,9 +598,28 @@ function toggleAnnouncementComment(id) {
   render();
 }
 
-function toggleAnnouncementSave(id) {
-  state.announcementSaved[id] = !state.announcementSaved[id];
-  if (state.announcementSaved[id]) {
+async function toggleAnnouncementSave(id) {
+  const wasSaved = !!state.announcementSaved[id];
+  const nextSaved = !wasSaved;
+  state.announcementSaved[id] = nextSaved;
+  render();
+  const a = data.announcements.find((x) => String(x.id) === String(id)) || {};
+  const res = await apiJson("/resources/save", {
+    method: "POST",
+    body: JSON.stringify({
+      resource_type: "announcement",
+      resource_id: String(id),
+      title: String(a.title || ""),
+      saved: nextSaved,
+    }),
+  });
+  if (!res.ok) {
+    state.announcementSaved[id] = wasSaved;
+    pushToast("error", res.body.message || "Failed to save announcement.");
+    render();
+    return;
+  }
+  if (nextSaved) {
     addNotification("Announcement Saved", "Added to your reminders.");
     pushToast("success", "Announcement saved.");
   } else {

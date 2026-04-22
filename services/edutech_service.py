@@ -2,6 +2,28 @@ from datetime import datetime
 from typing import Optional
 
 
+def _ensure_saved_resources_table(conn):
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS saved_resources (
+                saved_id INT NOT NULL AUTO_INCREMENT,
+                user_id INT NOT NULL,
+                resource_type VARCHAR(50) NOT NULL,
+                resource_id VARCHAR(100) NOT NULL,
+                title VARCHAR(255) DEFAULT NULL,
+                created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (saved_id),
+                UNIQUE KEY uniq_user_resource (user_id, resource_type, resource_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """
+        )
+        conn.commit()
+    finally:
+        cursor.close()
+
+
 def _progress_message(value: int) -> str:
     if value >= 100:
         return "Incredible!"
@@ -279,6 +301,30 @@ def get_bootstrap_data(conn, user_id: int):
         except Exception:
             result["course_comments"] = []
 
+        try:
+            _ensure_saved_resources_table(conn)
+            cursor.execute(
+                """
+                SELECT resource_type, resource_id, title, created_at
+                FROM saved_resources
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+                LIMIT 300
+                """,
+                (user_id,),
+            )
+            result["saved_resources"] = [
+                {
+                    "resource_type": row.get("resource_type") or "",
+                    "resource_id": row.get("resource_id") or "",
+                    "title": row.get("title") or "",
+                    "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+                }
+                for row in cursor.fetchall()
+            ]
+        except Exception:
+            result["saved_resources"] = []
+
         return result
     finally:
         cursor.close()
@@ -483,6 +529,57 @@ def add_course_comment(conn, user_id: int, course_id: Optional[int], section_key
         )
         conn.commit()
         return cursor.lastrowid
+    finally:
+        cursor.close()
+
+
+def set_saved_resource(
+    conn,
+    user_id: int,
+    resource_type: str,
+    resource_id: str,
+    title: str,
+    saved: bool,
+):
+    _ensure_saved_resources_table(conn)
+    cursor = conn.cursor()
+    try:
+        if saved:
+            cursor.execute(
+                """
+                INSERT INTO saved_resources (user_id, resource_type, resource_id, title)
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE title = VALUES(title)
+                """,
+                (user_id, resource_type, resource_id, title or None),
+            )
+        else:
+            cursor.execute(
+                """
+                DELETE FROM saved_resources
+                WHERE user_id = %s AND resource_type = %s AND resource_id = %s
+                """,
+                (user_id, resource_type, resource_id),
+            )
+        conn.commit()
+    finally:
+        cursor.close()
+
+
+def list_saved_resources(conn, user_id: int):
+    _ensure_saved_resources_table(conn)
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT resource_type, resource_id, title, created_at
+            FROM saved_resources
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            """,
+            (user_id,),
+        )
+        return cursor.fetchall()
     finally:
         cursor.close()
 

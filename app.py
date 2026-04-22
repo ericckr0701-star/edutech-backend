@@ -12,11 +12,13 @@ from database.users import init_simple_users_table
 from services.edutech_service import (
     add_forum_post,
     add_forum_reply_by_title,
+    list_saved_resources,
     checkout,
     clear_cart,
     get_bootstrap_data,
     add_course_comment,
     resolve_assignment_id_by_title,
+    set_saved_resource,
     submit_assignment,
     update_profile,
     upsert_cart_by_title,
@@ -405,6 +407,41 @@ def create_app():
             conn = get_db_connection()
             comment_id = add_course_comment(conn, uid, course_id, section_key, content)
             return jsonify({"status": "success", "comment_id": comment_id})
+        finally:
+            if conn is not None:
+                conn.close()
+
+    @app.route("/resources/save", methods=["POST"])
+    def resources_save():
+        uid = current_user_id()
+        if uid is None:
+            return auth_error()
+        payload = request.get_json(silent=True) or {}
+        resource_type = (payload.get("resource_type") or "").strip()
+        resource_id = (payload.get("resource_id") or "").strip()
+        title = (payload.get("title") or "").strip()
+        saved = bool(payload.get("saved"))
+        if not resource_type or not resource_id:
+            return jsonify({"status": "error", "message": "resource_type and resource_id are required"}), 400
+        conn = None
+        try:
+            conn = get_db_connection()
+            set_saved_resource(conn, uid, resource_type, resource_id, title, saved)
+            return jsonify({"status": "success"})
+        finally:
+            if conn is not None:
+                conn.close()
+
+    @app.route("/resources/saved", methods=["GET"])
+    def resources_saved():
+        uid = current_user_id()
+        if uid is None:
+            return auth_error()
+        conn = None
+        try:
+            conn = get_db_connection()
+            rows = list_saved_resources(conn, uid)
+            return jsonify({"status": "success", "items": rows})
         finally:
             if conn is not None:
                 conn.close()
