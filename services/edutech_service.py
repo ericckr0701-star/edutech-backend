@@ -429,12 +429,15 @@ def submit_assignment(
 ):
     cursor = conn.cursor()
     try:
+        # grade 字段长度较短（常见为 varchar(20)），不应写入前端长文案来源。
+        # 将来源标签放到 file_url（仅作来源备注），grade 固定为 Pending。
+        source_for_storage = (source_label or "").strip() or None
         cursor.execute(
             """
-            INSERT INTO assignment_submissions (assignment_id, user_id, text_answer, grade)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO assignment_submissions (assignment_id, user_id, file_url, text_answer, grade)
+            VALUES (%s, %s, %s, %s, %s)
             """,
-            (assignment_id, user_id, text_answer, source_label or "Pending"),
+            (assignment_id, user_id, source_for_storage, text_answer, "Pending"),
         )
         conn.commit()
         return cursor.lastrowid
