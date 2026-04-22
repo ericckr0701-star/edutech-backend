@@ -356,6 +356,9 @@ def create_app():
                 text_answer,
             )
             return jsonify({"status": "success", "submission_id": submission_id})
+        except Exception:
+            app.logger.exception("assignments submit failed")
+            return jsonify({"status": "error", "message": "Assignment submit failed"}), 500
         finally:
             if conn is not None:
                 conn.close()

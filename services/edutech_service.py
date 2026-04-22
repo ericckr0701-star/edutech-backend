@@ -453,7 +453,20 @@ def resolve_assignment_id_by_title(conn, title: str):
             (title,),
         )
         row = cursor.fetchone()
-        return int(row["assignment_id"]) if row else None
+        if row:
+            return int(row["assignment_id"])
+
+        # 前端可能存在演示作业标题（未落库）；自动补一条 assignments 记录，避免提交失败。
+        plain_cursor = conn.cursor()
+        try:
+            plain_cursor.execute(
+                "INSERT INTO assignments (course_id, title, description, due_date) VALUES (%s, %s, %s, %s)",
+                (None, title, "Auto-created by submission flow", None),
+            )
+            conn.commit()
+            return int(plain_cursor.lastrowid)
+        finally:
+            plain_cursor.close()
     finally:
         cursor.close()
 
