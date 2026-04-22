@@ -297,7 +297,20 @@ function hydrateFromBootstrap(payload) {
   if (Array.isArray(d.announcements)) data.announcements = d.announcements;
   if (Array.isArray(d.materials)) data.materials = d.materials;
   if (Array.isArray(d.assignments)) data.assignments = d.assignments;
-  if (Array.isArray(d.forum) && d.forum.length) data.forum = d.forum;
+  if (Array.isArray(d.forum) && d.forum.length) {
+    const merged = [];
+    const seen = new Set();
+    const addPost = (p) => {
+      const key = `${String(p?.title || "").trim().toLowerCase()}|${String(p?.author || "").trim().toLowerCase()}`;
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      merged.push(p);
+    };
+    // 后端真实数据优先，同时保留前端原始示例帖（去重）。
+    d.forum.forEach(addPost);
+    data.forum.forEach(addPost);
+    data.forum = merged;
+  }
   // 数据库优先：使用后端返回 image_url；仅在空值时使用前端兜底图。
   if (Array.isArray(d.books) && d.books.length) {
     const existingByTitle = new Map(data.books.map((b) => [b.title, b]));
