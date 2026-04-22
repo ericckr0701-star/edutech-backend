@@ -1607,20 +1607,27 @@ function commentsBlock(key) {
 
 function renderCourseTabContent() {
   const selectedCourseId = getSelectedCourseId();
-  const selectedAnnouncements = selectedCourseId
+  const selectedAnnouncementsRaw = selectedCourseId
     ? data.announcements.filter((a) => Number(a.course_id) === Number(selectedCourseId))
     : data.announcements;
-  const selectedMaterials = selectedCourseId
+  const selectedMaterialsRaw = selectedCourseId
     ? data.materials.filter((m) => Number(m.course_id) === Number(selectedCourseId))
     : data.materials;
-  const selectedAssignments = selectedCourseId
+  const selectedAssignmentsRaw = selectedCourseId
     ? data.assignments.filter((a) => Number(a.course_id) === Number(selectedCourseId))
+    : data.assignments;
+  // 数据库里该课程暂时没内容时，回退到前端原始示例内容，保证页面可读性。
+  const selectedAnnouncements = selectedAnnouncementsRaw.length
+    ? selectedAnnouncementsRaw
+    : data.announcements;
+  const selectedMaterials = selectedMaterialsRaw.length
+    ? selectedMaterialsRaw
+    : data.materials;
+  const selectedAssignments = selectedAssignmentsRaw.length
+    ? selectedAssignmentsRaw
     : data.assignments;
 
   if (state.courseTab === "Announcements") {
-    if (!selectedAnnouncements.length) {
-      return `<article class="card course-tab-card"><p class="muted">No announcements for this module yet.</p></article>`;
-    }
     return selectedAnnouncements
       .map(
         (a) => `
@@ -1715,7 +1722,7 @@ function renderCourseTabContent() {
             </article>
           `
         )
-        .join("") : `<article class="card course-tab-card"><p class="muted">No lecture notes/materials for this module yet.</p></article>`}
+        .join("") : `<article class="card course-tab-card"><p class="muted">No lecture notes/materials available.</p></article>`}
     `;
   }
 
@@ -1726,15 +1733,18 @@ function courseView() {
   const tabs = ["Announcements", "Material", "Assignment"];
   const selected = getSelectedCourse();
   const selectedCourseId = getSelectedCourseId();
-  const moduleAnnouncements = selectedCourseId
+  const moduleAnnouncementsRaw = selectedCourseId
     ? data.announcements.filter((a) => Number(a.course_id) === Number(selectedCourseId))
     : data.announcements;
-  const moduleMaterials = selectedCourseId
+  const moduleMaterialsRaw = selectedCourseId
     ? data.materials.filter((m) => Number(m.course_id) === Number(selectedCourseId))
     : data.materials;
-  const moduleAssignments = selectedCourseId
+  const moduleAssignmentsRaw = selectedCourseId
     ? data.assignments.filter((a) => Number(a.course_id) === Number(selectedCourseId))
     : data.assignments;
+  const moduleAnnouncements = moduleAnnouncementsRaw.length ? moduleAnnouncementsRaw : data.announcements;
+  const moduleMaterials = moduleMaterialsRaw.length ? moduleMaterialsRaw : data.materials;
+  const moduleAssignments = moduleAssignmentsRaw.length ? moduleAssignmentsRaw : data.assignments;
   return `
     <div class="page wide-page fixed-frame">
     ${nav()}
