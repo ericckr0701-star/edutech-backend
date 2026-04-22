@@ -252,6 +252,27 @@ def get_bootstrap_data(conn, user_id: int):
             for row in cursor.fetchall()
         ]
 
+        cursor.execute(
+            """
+            SELECT comment_id, course_id, section_type, content, created_at, u.username
+            FROM course_comments c
+            LEFT JOIN users u ON u.user_id = c.user_id
+            ORDER BY c.created_at DESC
+            LIMIT 300
+            """
+        )
+        result["course_comments"] = [
+            {
+                "comment_id": row["comment_id"],
+                "course_id": row.get("course_id"),
+                "section_key": row.get("section_type") or "",
+                "content": row.get("content") or "",
+                "author": row.get("username") or "Student",
+                "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+            }
+            for row in cursor.fetchall()
+        ]
+
         return result
     finally:
         cursor.close()
@@ -424,6 +445,22 @@ def resolve_assignment_id_by_title(conn, title: str):
         )
         row = cursor.fetchone()
         return int(row["assignment_id"]) if row else None
+    finally:
+        cursor.close()
+
+
+def add_course_comment(conn, user_id: int, course_id: Optional[int], section_key: str, content: str):
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO course_comments (course_id, user_id, section_type, content)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (course_id, user_id, section_key, content),
+        )
+        conn.commit()
+        return cursor.lastrowid
     finally:
         cursor.close()
 

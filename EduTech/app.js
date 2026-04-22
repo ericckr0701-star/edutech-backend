@@ -242,6 +242,13 @@ const data = {
   ],
 };
 
+// 保留一份前端原始课程内容快照，后端某模块没数据时回退使用。
+const seedCourseContent = {
+  announcements: data.announcements.map((x) => ({ ...x })),
+  materials: data.materials.map((x) => ({ ...x })),
+  assignments: data.assignments.map((x) => ({ ...x })),
+};
+
 const API_BASE = "https://web-production-679f6.up.railway.app";
 
 function deriveUsername(email) {
@@ -312,6 +319,26 @@ function hydrateFromBootstrap(payload) {
     });
   }
   if (d.cart && typeof d.cart === "object") state.cart = d.cart;
+  if (Array.isArray(d.course_comments)) {
+    state.announcementComments = {};
+    state.commentsByKey = {};
+    d.course_comments.forEach((c) => {
+      const key = String(c.section_key || "");
+      const item = {
+        author: c.author || "Student",
+        text: c.content || "",
+        time: c.created_at ? "Just now" : "Just now",
+      };
+      if (key.startsWith("announcement:")) {
+        const aid = key.replace("announcement:", "");
+        if (!state.announcementComments[aid]) state.announcementComments[aid] = [];
+        state.announcementComments[aid].push(item);
+      } else if (key) {
+        if (!state.commentsByKey[key]) state.commentsByKey[key] = [];
+        state.commentsByKey[key].push(item);
+      }
+    });
+  }
   state.bootstrapLoaded = true;
 }
 
@@ -578,10 +605,23 @@ function updateAnnouncementCommentDraft(id, value) {
   state.announcementCommentDrafts[id] = value;
 }
 
-function postAnnouncementComment(id) {
+async function postAnnouncementComment(id) {
   const text = String(state.announcementCommentDrafts[id] || "").trim();
   if (!text) {
     pushToast("error", "Please write a comment first.");
+    return;
+  }
+  const selectedCourseId = getSelectedCourseId();
+  const create = await apiJson("/comments", {
+    method: "POST",
+    body: JSON.stringify({
+      section_key: `announcement:${id}`,
+      course_id: selectedCourseId,
+      content: text,
+    }),
+  });
+  if (!create.ok) {
+    pushToast("error", create.body.message || "Failed to post comment.");
     return;
   }
   if (!state.announcementComments[id]) {
@@ -954,10 +994,23 @@ function submitAction(actionName) {
   render();
 }
 
-function postComment(key) {
+async function postComment(key) {
   const text = String(state.commentDrafts[key] || "").trim();
   if (!text) {
     pushToast("error", "Please type a comment first.");
+    return;
+  }
+  const selectedCourseId = getSelectedCourseId();
+  const create = await apiJson("/comments", {
+    method: "POST",
+    body: JSON.stringify({
+      section_key: key,
+      course_id: selectedCourseId,
+      content: text,
+    }),
+  });
+  if (!create.ok) {
+    pushToast("error", create.body.message || "Failed to post comment.");
     return;
   }
   if (!state.commentsByKey[key]) {
@@ -1619,13 +1672,13 @@ function renderCourseTabContent() {
   // 数据库里该课程暂时没内容时，回退到前端原始示例内容，保证页面可读性。
   const selectedAnnouncements = selectedAnnouncementsRaw.length
     ? selectedAnnouncementsRaw
-    : data.announcements;
+    : seedCourseContent.announcements;
   const selectedMaterials = selectedMaterialsRaw.length
     ? selectedMaterialsRaw
-    : data.materials;
+    : seedCourseContent.materials;
   const selectedAssignments = selectedAssignmentsRaw.length
     ? selectedAssignmentsRaw
-    : data.assignments;
+    : seedCourseContent.assignments;
 
   if (state.courseTab === "Announcements") {
     return selectedAnnouncements
@@ -1742,9 +1795,15 @@ function courseView() {
   const moduleAssignmentsRaw = selectedCourseId
     ? data.assignments.filter((a) => Number(a.course_id) === Number(selectedCourseId))
     : data.assignments;
-  const moduleAnnouncements = moduleAnnouncementsRaw.length ? moduleAnnouncementsRaw : data.announcements;
-  const moduleMaterials = moduleMaterialsRaw.length ? moduleMaterialsRaw : data.materials;
-  const moduleAssignments = moduleAssignmentsRaw.length ? moduleAssignmentsRaw : data.assignments;
+  const moduleAnnouncements = moduleAnnouncementsRaw.length
+    ? moduleAnnouncementsRaw
+    : seedCourseContent.announcements;
+  const moduleMaterials = moduleMaterialsRaw.length
+    ? moduleMaterialsRaw
+    : seedCourseContent.materials;
+  const moduleAssignments = moduleAssignmentsRaw.length
+    ? moduleAssignmentsRaw
+    : seedCourseContent.assignments;
   return `
     <div class="page wide-page fixed-frame">
     ${nav()}

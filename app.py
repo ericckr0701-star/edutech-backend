@@ -15,6 +15,7 @@ from services.edutech_service import (
     checkout,
     clear_cart,
     get_bootstrap_data,
+    add_course_comment,
     resolve_assignment_id_by_title,
     submit_assignment,
     update_profile,
@@ -374,6 +375,30 @@ def create_app():
             return jsonify({"status": "success"})
         except Exception:
             return jsonify({"status": "error", "message": "Profile update failed"}), 400
+        finally:
+            if conn is not None:
+                conn.close()
+
+    @app.route("/comments", methods=["POST"])
+    def comments_create():
+        uid = current_user_id()
+        if uid is None:
+            return auth_error()
+        payload = request.get_json(silent=True) or {}
+        section_key = (payload.get("section_key") or "").strip()
+        content = (payload.get("content") or "").strip()
+        course_id = payload.get("course_id")
+        if not section_key or not content:
+            return jsonify({"status": "error", "message": "section_key and content are required"}), 400
+        try:
+            course_id = int(course_id) if course_id is not None else None
+        except Exception:
+            return jsonify({"status": "error", "message": "course_id must be integer"}), 400
+        conn = None
+        try:
+            conn = get_db_connection()
+            comment_id = add_course_comment(conn, uid, course_id, section_key, content)
+            return jsonify({"status": "success", "comment_id": comment_id})
         finally:
             if conn is not None:
                 conn.close()
