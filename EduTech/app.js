@@ -1052,6 +1052,37 @@ function findAssignmentByClientKey(clientKey) {
   return assignmentSource.find((a) => getAssignmentClientKey(a) === clientKey) || null;
 }
 
+function mergeAssignmentsPreferSeed(assignmentsRaw) {
+  const mergedByTitle = new Map();
+
+  (Array.isArray(assignmentsRaw) ? assignmentsRaw : []).forEach((a) => {
+    const key = String(a?.title || a?.id || "");
+    if (!key) return;
+    mergedByTitle.set(key, { ...a });
+  });
+
+  // 同标题冲突时，优先保留 seed（原本带选项/原始展示），
+  // 但回填后端 assignment_id / course_id，保证可提交。
+  seedCourseContent.assignments.forEach((seed) => {
+    const key = String(seed?.title || seed?.id || "");
+    if (!key) return;
+    const existing = mergedByTitle.get(key);
+    if (!existing) {
+      mergedByTitle.set(key, { ...seed });
+      return;
+    }
+    mergedByTitle.set(key, {
+      ...existing,
+      ...seed,
+      assignment_id: existing.assignment_id ?? seed.assignment_id,
+      course_id: existing.course_id ?? seed.course_id,
+      dueAt: existing.dueAt ?? seed.dueAt,
+    });
+  });
+
+  return Array.from(mergedByTitle.values());
+}
+
 async function submitAssignment(assignmentClientKey, sourceLabel) {
   const assignment = findAssignmentByClientKey(assignmentClientKey);
   if (!assignment) return;
@@ -1692,19 +1723,7 @@ function renderCourseTabContent() {
   const selectedMaterials = selectedMaterialsRaw.length
     ? selectedMaterialsRaw
     : seedCourseContent.materials;
-  // assignments 使用“后端优先 + seed 补齐”策略，避免某课程只显示 1 条题目。
-  const selectedAssignmentsMap = new Map();
-  selectedAssignmentsRaw.forEach((a) => {
-    const k = String(a.title || a.id || Math.random());
-    selectedAssignmentsMap.set(k, a);
-  });
-  seedCourseContent.assignments.forEach((a) => {
-    const k = String(a.title || a.id || Math.random());
-    if (!selectedAssignmentsMap.has(k)) {
-      selectedAssignmentsMap.set(k, a);
-    }
-  });
-  const selectedAssignments = Array.from(selectedAssignmentsMap.values());
+  const selectedAssignments = mergeAssignmentsPreferSeed(selectedAssignmentsRaw);
 
   if (state.courseTab === "Announcements") {
     return selectedAnnouncements
@@ -1827,18 +1846,7 @@ function courseView() {
   const moduleMaterials = moduleMaterialsRaw.length
     ? moduleMaterialsRaw
     : seedCourseContent.materials;
-  const moduleAssignmentsMap = new Map();
-  moduleAssignmentsRaw.forEach((a) => {
-    const k = String(a.title || a.id || Math.random());
-    moduleAssignmentsMap.set(k, a);
-  });
-  seedCourseContent.assignments.forEach((a) => {
-    const k = String(a.title || a.id || Math.random());
-    if (!moduleAssignmentsMap.has(k)) {
-      moduleAssignmentsMap.set(k, a);
-    }
-  });
-  const moduleAssignments = Array.from(moduleAssignmentsMap.values());
+  const moduleAssignments = mergeAssignmentsPreferSeed(moduleAssignmentsRaw);
   return `
     <div class="page wide-page fixed-frame">
     ${nav()}
