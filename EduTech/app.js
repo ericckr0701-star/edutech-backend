@@ -814,8 +814,11 @@ function viewPost(title) {
   render();
 }
 
-function replyPost(title) {
-  state.forumReplyTo = title;
+function replyPost(postId, title) {
+  state.forumReplyTo = {
+    post_id: postId != null ? Number(postId) : null,
+    title: String(title || ""),
+  };
   state.forumReplyDraft = "";
   render();
 }
@@ -947,6 +950,7 @@ async function submitForumQuestion() {
     return;
   }
   data.forum.unshift({
+    post_id: create.body.post_id || null,
     title: text,
     author: data.user.name || "You",
     avatar: String((data.user.name || "U")[0] || "U").toUpperCase(),
@@ -977,18 +981,26 @@ async function submitForumReply() {
   }
   const reply = await apiJson("/forum/replies", {
     method: "POST",
-    body: JSON.stringify({ post_title: state.forumReplyTo, content: text }),
+    body: JSON.stringify({
+      post_id: state.forumReplyTo.post_id,
+      post_title: state.forumReplyTo.title,
+      content: text,
+    }),
   });
   if (!reply.ok) {
     pushToast("error", reply.body.message || "Failed to post reply.");
     return;
   }
-  const post = data.forum.find((p) => p.title === state.forumReplyTo);
+  const post = data.forum.find((p) =>
+    state.forumReplyTo.post_id != null
+      ? Number(p.post_id) === Number(state.forumReplyTo.post_id)
+      : p.title === state.forumReplyTo.title
+  );
   if (post) {
     post.replies += 1;
     post.last = "Just now";
   }
-  addNotification("Forum", `Reply posted to "${state.forumReplyTo}".`);
+  addNotification("Forum", `Reply posted to "${state.forumReplyTo.title}".`);
   pushToast("success", "Reply posted.");
   state.forumReplyTo = null;
   state.forumReplyDraft = "";
@@ -1966,7 +1978,7 @@ function forumView() {
       ${
         state.forumReplyTo
           ? `<div class="card preview-card">
-              <h4>Reply to: ${state.forumReplyTo}</h4>
+              <h4>Reply to: ${state.forumReplyTo.title}</h4>
               <textarea placeholder="Write your reply..." oninput="updateForumReply(this.value)">${state.forumReplyDraft}</textarea>
               <div class="button-row">
                 <button class="button button-primary" onclick="submitForumReply()">Submit Reply</button>
@@ -2023,7 +2035,7 @@ function forumView() {
               </div>
               <div class="forum-actions">
                 <button class="button button-secondary" onclick="viewPost('${post.title.replace(/'/g, "\\'")}')">View Post</button>
-                <button class="button button-secondary" onclick="replyPost('${post.title.replace(/'/g, "\\'")}')">Reply</button>
+                <button class="button button-secondary" onclick="replyPost(${post.post_id != null ? Number(post.post_id) : "null"}, '${post.title.replace(/'/g, "\\'")}')">Reply</button>
               </div>
             </div>`
         )

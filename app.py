@@ -11,7 +11,7 @@ from database.connection import get_db_connection
 from database.users import init_simple_users_table
 from services.edutech_service import (
     add_forum_post,
-    add_forum_reply_by_title,
+    add_forum_reply,
     list_saved_resources,
     checkout,
     clear_cart,
@@ -253,14 +253,19 @@ def create_app():
         if uid is None:
             return auth_error()
         payload = request.get_json(silent=True) or {}
+        post_id = payload.get("post_id")
         post_title = (payload.get("post_title") or "").strip()
         content = (payload.get("content") or "").strip()
-        if not post_title or not content:
-            return jsonify({"status": "error", "message": "post_title and content are required"}), 400
+        if not content or (post_id is None and not post_title):
+            return jsonify({"status": "error", "message": "post_id or post_title and content are required"}), 400
+        try:
+            post_id = int(post_id) if post_id is not None else None
+        except Exception:
+            return jsonify({"status": "error", "message": "post_id must be integer"}), 400
         conn = None
         try:
             conn = get_db_connection()
-            ok = add_forum_reply_by_title(conn, uid, post_title, content)
+            ok = add_forum_reply(conn, uid, content, post_id=post_id, post_title=post_title)
             if not ok:
                 return jsonify({"status": "error", "message": "Post not found"}), 404
             return jsonify({"status": "success"})

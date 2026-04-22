@@ -343,14 +343,19 @@ def add_forum_post(conn, user_id: int, title: str, content: str):
         cursor.close()
 
 
-def add_forum_reply_by_title(conn, user_id: int, post_title: str, content: str):
+def add_forum_reply(conn, user_id: int, content: str, post_id: Optional[int] = None, post_title: str = ""):
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute(
-            "SELECT post_id FROM forum_posts WHERE title = %s ORDER BY post_id DESC LIMIT 1",
-            (post_title,),
-        )
-        post = cursor.fetchone()
+        post = None
+        if post_id is not None:
+            cursor.execute("SELECT post_id FROM forum_posts WHERE post_id = %s LIMIT 1", (post_id,))
+            post = cursor.fetchone()
+        if not post and post_title:
+            cursor.execute(
+                "SELECT post_id FROM forum_posts WHERE title = %s ORDER BY post_id DESC LIMIT 1",
+                (post_title,),
+            )
+            post = cursor.fetchone()
         if not post:
             return False
         cursor.execute(
