@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 
 def _progress_message(value: int) -> str:
@@ -182,13 +183,24 @@ def get_bootstrap_data(conn, user_id: int):
             for row in cursor.fetchall()
         ]
 
-        cursor.execute(
-            """
-            SELECT book_id, title, price, stock_quantity
-            FROM books
-            ORDER BY book_id ASC
-            """
-        )
+        cursor.execute("SHOW COLUMNS FROM books LIKE 'image_url'")
+        has_image_url = cursor.fetchone() is not None
+        if has_image_url:
+            cursor.execute(
+                """
+                SELECT book_id, title, price, stock_quantity, image_url
+                FROM books
+                ORDER BY book_id ASC
+                """
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT book_id, title, price, stock_quantity
+                FROM books
+                ORDER BY book_id ASC
+                """
+            )
         result["books"] = [
             {
                 "book_id": row["book_id"],
@@ -198,7 +210,7 @@ def get_bootstrap_data(conn, user_id: int):
                 "area": "Klang Valley",
                 "type": "Book",
                 "category": "Featured",
-                "image": "",
+                "image": row.get("image_url") or "",
                 "stock_quantity": int(row.get("stock_quantity") or 0),
             }
             for row in cursor.fetchall()
@@ -217,6 +229,26 @@ def get_bootstrap_data(conn, user_id: int):
         for row in cursor.fetchall():
             cart[row["title"]] = int(row.get("quantity") or 0)
         result["cart"] = cart
+
+        cursor.execute(
+            """
+            SELECT order_id, total_amount, order_date, status
+            FROM orders
+            WHERE user_id = %s
+            ORDER BY order_date DESC
+            LIMIT 20
+            """,
+            (user_id,),
+        )
+        result["orders"] = [
+            {
+                "order_id": row["order_id"],
+                "total_amount": float(row.get("total_amount") or 0),
+                "order_date": row["order_date"].isoformat() if row.get("order_date") else None,
+                "status": row.get("status") or "pending",
+            }
+            for row in cursor.fetchall()
+        ]
 
         return result
     finally:
@@ -304,7 +336,7 @@ def checkout(conn, user_id: int):
     try:
         cursor.execute(
             """
-            SELECT sc.book_id, sc.quantity, b.price
+            SELECT sc.book_id, sc.quantity, b.price, b.stock_quantity, b.title
             FROM shopping_cart sc
             JOIN books b ON b.book_id = sc.book_id
             WHERE sc.user_id = %s
@@ -314,6 +346,14 @@ def checkout(conn, user_id: int):
         items = cursor.fetchall()
         if not items:
             return None
+        for item in items:
+            stock = int(item.get("stock_quantity") or 0)
+            qty = int(item.get("quantity") or 0)
+            if qty > stock:
+                return {
+                    "error": "insufficient_stock",
+                    "message": f"Insufficient stock for {item.get('title') or 'book'}",
+                }
         total = sum(float(i["price"]) * int(i["quantity"]) for i in items)
         cursor.execute(
             "INSERT INTO orders (user_id, total_amount, status) VALUES (%s, %s, %s)",
@@ -327,6 +367,10 @@ def checkout(conn, user_id: int):
                 VALUES (%s, %s, %s, %s)
                 """,
                 (order_id, item["book_id"], item["quantity"], item["price"]),
+            )
+            cursor.execute(
+                "UPDATE books SET stock_quantity = stock_quantity - %s WHERE book_id = %s",
+                (item["quantity"], item["book_id"]),
             )
         cursor.execute("DELETE FROM shopping_cart WHERE user_id = %s", (user_id,))
         conn.commit()
@@ -343,6 +387,41 @@ def update_profile(conn, user_id: int, name: str, email: str):
             (name, email, user_id),
         )
         conn.commit()
+    finally:
+        cursor.close()
+
+
+def submit_assignment(
+    conn,
+    user_id: int,
+    assignment_id: Optional[int],
+    source_label: str,
+    text_answer: str | None = None,
+):
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO assignment_submissions (assignment_id, user_id, text_answer, grade)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (assignment_id, user_id, text_answer, source_label or "Pending"),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        cursor.close()
+
+
+def resolve_assignment_id_by_title(conn, title: str):
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT assignment_id FROM assignments WHERE title = %s ORDER BY assignment_id DESC LIMIT 1",
+            (title,),
+        )
+        row = cursor.fetchone()
+        return int(row["assignment_id"]) if row else None
     finally:
         cursor.close()
 

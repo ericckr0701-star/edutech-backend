@@ -15,6 +15,8 @@ from services.edutech_service import (
     checkout,
     clear_cart,
     get_bootstrap_data,
+    resolve_assignment_id_by_title,
+    submit_assignment,
     update_profile,
     upsert_cart_by_title,
 )
@@ -310,6 +312,8 @@ def create_app():
             receipt = checkout(conn, uid)
             if not receipt:
                 return jsonify({"status": "error", "message": "Cart is empty"}), 400
+            if receipt.get("error") == "insufficient_stock":
+                return jsonify({"status": "error", "message": receipt.get("message")}), 400
             return jsonify(
                 {
                     "status": "success",
@@ -317,6 +321,37 @@ def create_app():
                     "total": receipt["total"],
                 }
             )
+        finally:
+            if conn is not None:
+                conn.close()
+
+    @app.route("/assignments/submit", methods=["POST"])
+    def assignments_submit():
+        uid = current_user_id()
+        if uid is None:
+            return auth_error()
+        payload = request.get_json(silent=True) or {}
+        assignment_id = payload.get("assignment_id")
+        title = (payload.get("title") or "").strip()
+        source_label = (payload.get("source_label") or "Submitted").strip()
+        text_answer = payload.get("text_answer")
+        try:
+            assignment_id = int(assignment_id) if assignment_id is not None else None
+        except Exception:
+            return jsonify({"status": "error", "message": "assignment_id must be integer"}), 400
+        conn = None
+        try:
+            conn = get_db_connection()
+            if assignment_id is None and title:
+                assignment_id = resolve_assignment_id_by_title(conn, title)
+            submission_id = submit_assignment(
+                conn,
+                uid,
+                assignment_id,
+                source_label,
+                text_answer,
+            )
+            return jsonify({"status": "success", "submission_id": submission_id})
         finally:
             if conn is not None:
                 conn.close()

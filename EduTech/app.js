@@ -291,8 +291,26 @@ function hydrateFromBootstrap(payload) {
   if (Array.isArray(d.materials)) data.materials = d.materials;
   if (Array.isArray(d.assignments)) data.assignments = d.assignments;
   if (Array.isArray(d.forum) && d.forum.length) data.forum = d.forum;
-  // 当数据库 books 为空时，保留前端内置示例卡片（含封面图），避免页面看起来“全没了”。
-  if (Array.isArray(d.books) && d.books.length) data.books = d.books;
+  // 数据库优先：使用后端返回 image_url；仅在空值时使用前端兜底图。
+  if (Array.isArray(d.books) && d.books.length) {
+    const existingByTitle = new Map(data.books.map((b) => [b.title, b]));
+    const fallbackImages = [
+      "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1519682337058-a94d519337bc?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=800&q=80",
+    ];
+    data.books = d.books.map((book, idx) => {
+      const old = existingByTitle.get(book.title) || {};
+      return {
+        ...old,
+        ...book,
+        image: book.image || old.image || fallbackImages[idx % fallbackImages.length],
+      };
+    });
+  }
   if (d.cart && typeof d.cart === "object") state.cart = d.cart;
   state.bootstrapLoaded = true;
 }
@@ -957,7 +975,7 @@ function formatSubmittedTime(ts) {
   });
 }
 
-function submitAssignment(assignmentId, sourceLabel) {
+async function submitAssignment(assignmentId, sourceLabel) {
   const assignment = data.assignments.find((a) => a.id === assignmentId);
   if (!assignment) return;
   if (assignment.type === "short" && !String(state.shortAnswerDrafts[assignmentId] || "").trim()) {
@@ -967,6 +985,22 @@ function submitAssignment(assignmentId, sourceLabel) {
   const now = Date.now();
   const dueAt = assignment.dueAt ? new Date(assignment.dueAt).getTime() : null;
   const isLate = dueAt ? now > dueAt : false;
+  const submitRes = await apiJson("/assignments/submit", {
+    method: "POST",
+    body: JSON.stringify({
+      assignment_id: assignment.assignment_id || null,
+      title: assignment.title,
+      source_label: sourceLabel,
+      text_answer:
+        assignment.type === "short"
+          ? String(state.shortAnswerDrafts[assignmentId] || "").trim()
+          : null,
+    }),
+  });
+  if (!submitRes.ok) {
+    pushToast("error", submitRes.body.message || "Failed to submit assignment.");
+    return;
+  }
   state.assignmentSubmissions[assignmentId] = {
     submittedAt: now,
     isLate,
