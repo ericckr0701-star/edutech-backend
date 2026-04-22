@@ -9,6 +9,15 @@ from werkzeug.utils import secure_filename
 from config import Config
 from database.connection import get_db_connection
 from database.users import init_simple_users_table
+from services.edutech_service import (
+    add_forum_post,
+    add_forum_reply_by_title,
+    checkout,
+    clear_cart,
+    get_bootstrap_data,
+    update_profile,
+    upsert_cart_by_title,
+)
 from services.user_service import try_register_user, verify_login
 
 UPLOAD_FOLDER = "uploads"
@@ -38,6 +47,13 @@ def create_app():
     bcrypt = Bcrypt(app)
 
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+    def current_user_id():
+        uid = session.get("user_id")
+        return int(uid) if uid is not None else None
+
+    def auth_error():
+        return jsonify({"status": "error", "message": "Not authenticated"}), 401
 
     @app.before_request
     def _ensure_simple_users_schema_once():
@@ -187,6 +203,145 @@ def create_app():
                 "message": f"File {safe_name} uploaded successfully",
             }
         )
+
+    @app.route("/bootstrap", methods=["GET"])
+    def bootstrap():
+        uid = current_user_id()
+        if uid is None:
+            return auth_error()
+        conn = None
+        try:
+            conn = get_db_connection()
+            data = get_bootstrap_data(conn, uid)
+            if not data:
+                return auth_error()
+            return jsonify({"status": "success", "data": data})
+        finally:
+            if conn is not None:
+                conn.close()
+
+    @app.route("/forum/posts", methods=["POST"])
+    def forum_posts_create():
+        uid = current_user_id()
+        if uid is None:
+            return auth_error()
+        payload = request.get_json(silent=True) or {}
+        title = (payload.get("title") or "").strip()
+        content = (payload.get("content") or "").strip()
+        if not title or not content:
+            return jsonify({"status": "error", "message": "Title and content are required"}), 400
+        conn = None
+        try:
+            conn = get_db_connection()
+            post_id = add_forum_post(conn, uid, title, content)
+            return jsonify({"status": "success", "post_id": post_id})
+        finally:
+            if conn is not None:
+                conn.close()
+
+    @app.route("/forum/replies", methods=["POST"])
+    def forum_replies_create():
+        uid = current_user_id()
+        if uid is None:
+            return auth_error()
+        payload = request.get_json(silent=True) or {}
+        post_title = (payload.get("post_title") or "").strip()
+        content = (payload.get("content") or "").strip()
+        if not post_title or not content:
+            return jsonify({"status": "error", "message": "post_title and content are required"}), 400
+        conn = None
+        try:
+            conn = get_db_connection()
+            ok = add_forum_reply_by_title(conn, uid, post_title, content)
+            if not ok:
+                return jsonify({"status": "error", "message": "Post not found"}), 404
+            return jsonify({"status": "success"})
+        finally:
+            if conn is not None:
+                conn.close()
+
+    @app.route("/cart/items", methods=["POST"])
+    def cart_items_upsert():
+        uid = current_user_id()
+        if uid is None:
+            return auth_error()
+        payload = request.get_json(silent=True) or {}
+        title = (payload.get("title") or "").strip()
+        quantity = payload.get("quantity")
+        if not title or quantity is None:
+            return jsonify({"status": "error", "message": "title and quantity are required"}), 400
+        try:
+            quantity = int(quantity)
+        except Exception:
+            return jsonify({"status": "error", "message": "quantity must be integer"}), 400
+        conn = None
+        try:
+            conn = get_db_connection()
+            ok = upsert_cart_by_title(conn, uid, title, quantity)
+            if not ok:
+                return jsonify({"status": "error", "message": "Book not found"}), 404
+            return jsonify({"status": "success"})
+        finally:
+            if conn is not None:
+                conn.close()
+
+    @app.route("/cart/clear", methods=["POST"])
+    def cart_clear():
+        uid = current_user_id()
+        if uid is None:
+            return auth_error()
+        conn = None
+        try:
+            conn = get_db_connection()
+            clear_cart(conn, uid)
+            return jsonify({"status": "success"})
+        finally:
+            if conn is not None:
+                conn.close()
+
+    @app.route("/checkout", methods=["POST"])
+    def checkout_api():
+        uid = current_user_id()
+        if uid is None:
+            return auth_error()
+        conn = None
+        try:
+            conn = get_db_connection()
+            receipt = checkout(conn, uid)
+            if not receipt:
+                return jsonify({"status": "error", "message": "Cart is empty"}), 400
+            return jsonify(
+                {
+                    "status": "success",
+                    "orderId": f"ORD-{receipt['order_id']}",
+                    "total": receipt["total"],
+                }
+            )
+        finally:
+            if conn is not None:
+                conn.close()
+
+    @app.route("/profile", methods=["POST"])
+    def profile_update():
+        uid = current_user_id()
+        if uid is None:
+            return auth_error()
+        payload = request.get_json(silent=True) or {}
+        name = (payload.get("name") or "").strip()
+        email = (payload.get("email") or "").strip()
+        if not name or not email:
+            return jsonify({"status": "error", "message": "name and email are required"}), 400
+        conn = None
+        try:
+            conn = get_db_connection()
+            update_profile(conn, uid, name, email)
+            session["username"] = name
+            return jsonify({"status": "success"})
+        except Exception:
+            return jsonify({"status": "error", "message": "Profile update failed"}), 400
+        finally:
+            if conn is not None:
+                conn.close()
 
     return app
 
