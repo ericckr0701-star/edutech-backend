@@ -219,6 +219,9 @@ def create_app():
             if not data:
                 return auth_error()
             return jsonify({"status": "success", "data": data})
+        except Exception:
+            app.logger.exception("bootstrap failed")
+            return jsonify({"status": "error", "message": "Bootstrap failed"}), 500
         finally:
             if conn is not None:
                 conn.close()

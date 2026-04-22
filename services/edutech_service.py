@@ -232,46 +232,52 @@ def get_bootstrap_data(conn, user_id: int):
             cart[row["title"]] = int(row.get("quantity") or 0)
         result["cart"] = cart
 
-        cursor.execute(
-            """
-            SELECT order_id, total_amount, order_date, status
-            FROM orders
-            WHERE user_id = %s
-            ORDER BY order_date DESC
-            LIMIT 20
-            """,
-            (user_id,),
-        )
-        result["orders"] = [
-            {
-                "order_id": row["order_id"],
-                "total_amount": float(row.get("total_amount") or 0),
-                "order_date": row["order_date"].isoformat() if row.get("order_date") else None,
-                "status": row.get("status") or "pending",
-            }
-            for row in cursor.fetchall()
-        ]
+        try:
+            cursor.execute(
+                """
+                SELECT order_id, total_amount, order_date, status
+                FROM orders
+                WHERE user_id = %s
+                ORDER BY order_date DESC
+                LIMIT 20
+                """,
+                (user_id,),
+            )
+            result["orders"] = [
+                {
+                    "order_id": row["order_id"],
+                    "total_amount": float(row.get("total_amount") or 0),
+                    "order_date": row["order_date"].isoformat() if row.get("order_date") else None,
+                    "status": row.get("status") or "pending",
+                }
+                for row in cursor.fetchall()
+            ]
+        except Exception:
+            result["orders"] = []
 
-        cursor.execute(
-            """
-            SELECT comment_id, course_id, section_type, content, created_at, u.username
-            FROM course_comments c
-            LEFT JOIN users u ON u.user_id = c.user_id
-            ORDER BY c.created_at DESC
-            LIMIT 300
-            """
-        )
-        result["course_comments"] = [
-            {
-                "comment_id": row["comment_id"],
-                "course_id": row.get("course_id"),
-                "section_key": row.get("section_type") or "",
-                "content": row.get("content") or "",
-                "author": row.get("username") or "Student",
-                "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
-            }
-            for row in cursor.fetchall()
-        ]
+        try:
+            cursor.execute(
+                """
+                SELECT c.comment_id, c.course_id, c.section_type, c.content, c.created_at, u.username
+                FROM course_comments c
+                LEFT JOIN users u ON u.user_id = c.user_id
+                ORDER BY c.created_at DESC
+                LIMIT 300
+                """
+            )
+            result["course_comments"] = [
+                {
+                    "comment_id": row["comment_id"],
+                    "course_id": row.get("course_id"),
+                    "section_key": row.get("section_type") or "",
+                    "content": row.get("content") or "",
+                    "author": row.get("username") or "Student",
+                    "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+                }
+                for row in cursor.fetchall()
+            ]
+        except Exception:
+            result["course_comments"] = []
 
         return result
     finally:
