@@ -588,3 +588,52 @@ def list_saved_resources(conn, user_id: int):
     finally:
         cursor.close()
 
+
+def create_notification(conn, user_id: int, title: str, message: str):
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO notifications (user_id, title, message, is_read)
+            VALUES (%s, %s, %s, 0)
+            """,
+            (user_id, title or "Notice", message or ""),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        cursor.close()
+
+
+def mark_notification_read(conn, user_id: int, notification_id: int):
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            UPDATE notifications
+            SET is_read = 1
+            WHERE user_id = %s AND notification_id = %s
+            """,
+            (user_id, notification_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        cursor.close()
+
+
+def mark_all_notifications_read(conn, user_id: int):
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            UPDATE notifications
+            SET is_read = 1
+            WHERE user_id = %s
+            """,
+            (user_id,),
+        )
+        conn.commit()
+    finally:
+        cursor.close()
+

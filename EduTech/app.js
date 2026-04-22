@@ -703,7 +703,13 @@ function unreadNotificationsCount() {
   return data.notifications.filter((n) => !n.read).length;
 }
 
-function addNotification(title, text) {
+function parseNotificationId(rawId) {
+  const s = String(rawId || "");
+  if (!s) return null;
+  return Number(s.startsWith("n") ? s.slice(1) : s);
+}
+
+async function addNotification(title, text) {
   const item = {
     id: `n${Date.now()}`,
     title,
@@ -712,6 +718,19 @@ function addNotification(title, text) {
     read: false,
   };
   data.notifications.unshift(item);
+  // 通知写入数据库；失败不阻断前端交互。
+  try {
+    const res = await apiJson("/notifications", {
+      method: "POST",
+      body: JSON.stringify({
+        title: title || "Notice",
+        message: text || "",
+      }),
+    });
+    if (res.ok && res.body && res.body.notification_id) {
+      item.id = `n${res.body.notification_id}`;
+    }
+  } catch {}
 }
 
 function openNotificationsCenter() {
@@ -719,17 +738,29 @@ function openNotificationsCenter() {
   render();
 }
 
-function markAllNotificationsRead() {
+async function markAllNotificationsRead() {
   data.notifications.forEach((n) => {
     n.read = true;
   });
+  try {
+    await apiJson("/notifications/read-all", { method: "POST", body: "{}" });
+  } catch {}
   render();
 }
 
-function markNotificationRead(id) {
+async function markNotificationRead(id) {
   const item = data.notifications.find((n) => n.id === id);
   if (!item) return;
   item.read = true;
+  const numericId = parseNotificationId(id);
+  if (numericId != null && !Number.isNaN(numericId)) {
+    try {
+      await apiJson("/notifications/read", {
+        method: "POST",
+        body: JSON.stringify({ notification_id: numericId }),
+      });
+    } catch {}
+  }
   render();
 }
 

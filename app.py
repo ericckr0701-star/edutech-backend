@@ -12,7 +12,10 @@ from database.users import init_simple_users_table
 from services.edutech_service import (
     add_forum_post,
     add_forum_reply,
+    create_notification,
     list_saved_resources,
+    mark_all_notifications_read,
+    mark_notification_read,
     checkout,
     clear_cart,
     get_bootstrap_data,
@@ -447,6 +450,61 @@ def create_app():
             conn = get_db_connection()
             rows = list_saved_resources(conn, uid)
             return jsonify({"status": "success", "items": rows})
+        finally:
+            if conn is not None:
+                conn.close()
+
+    @app.route("/notifications", methods=["POST"])
+    def notifications_create():
+        uid = current_user_id()
+        if uid is None:
+            return auth_error()
+        payload = request.get_json(silent=True) or {}
+        title = (payload.get("title") or "").strip()
+        message = (payload.get("message") or "").strip()
+        if not title and not message:
+            return jsonify({"status": "error", "message": "title or message is required"}), 400
+        conn = None
+        try:
+            conn = get_db_connection()
+            notification_id = create_notification(conn, uid, title, message)
+            return jsonify({"status": "success", "notification_id": notification_id})
+        finally:
+            if conn is not None:
+                conn.close()
+
+    @app.route("/notifications/read", methods=["POST"])
+    def notifications_mark_read():
+        uid = current_user_id()
+        if uid is None:
+            return auth_error()
+        payload = request.get_json(silent=True) or {}
+        notification_id = payload.get("notification_id")
+        try:
+            notification_id = int(notification_id)
+        except Exception:
+            return jsonify({"status": "error", "message": "notification_id must be integer"}), 400
+        conn = None
+        try:
+            conn = get_db_connection()
+            ok = mark_notification_read(conn, uid, notification_id)
+            if not ok:
+                return jsonify({"status": "error", "message": "Notification not found"}), 404
+            return jsonify({"status": "success"})
+        finally:
+            if conn is not None:
+                conn.close()
+
+    @app.route("/notifications/read-all", methods=["POST"])
+    def notifications_mark_read_all():
+        uid = current_user_id()
+        if uid is None:
+            return auth_error()
+        conn = None
+        try:
+            conn = get_db_connection()
+            mark_all_notifications_read(conn, uid)
+            return jsonify({"status": "success"})
         finally:
             if conn is not None:
                 conn.close()
