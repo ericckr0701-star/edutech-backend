@@ -1037,14 +1037,24 @@ function formatSubmittedTime(ts) {
   });
 }
 
-async function submitAssignment(assignmentId, sourceLabel) {
+function getAssignmentClientKey(assignment) {
+  const cid = assignment && assignment.course_id != null ? assignment.course_id : "seed";
+  const aid = assignment && assignment.id ? assignment.id : assignment?.title || "unknown";
+  return `${cid}:${aid}`;
+}
+
+function findAssignmentByClientKey(clientKey) {
   const assignmentSource =
     Array.isArray(data.assignments) && data.assignments.length
       ? data.assignments
       : seedCourseContent.assignments;
-  const assignment = assignmentSource.find((a) => a.id === assignmentId);
+  return assignmentSource.find((a) => getAssignmentClientKey(a) === clientKey) || null;
+}
+
+async function submitAssignment(assignmentClientKey, sourceLabel) {
+  const assignment = findAssignmentByClientKey(assignmentClientKey);
   if (!assignment) return;
-  if (assignment.type === "short" && !String(state.shortAnswerDrafts[assignmentId] || "").trim()) {
+  if (assignment.type === "short" && !String(state.shortAnswerDrafts[assignmentClientKey] || "").trim()) {
     pushToast("error", "Please write your short answer before submitting.");
     return;
   }
@@ -1059,7 +1069,7 @@ async function submitAssignment(assignmentId, sourceLabel) {
       source_label: sourceLabel,
       text_answer:
         assignment.type === "short"
-          ? String(state.shortAnswerDrafts[assignmentId] || "").trim()
+          ? String(state.shortAnswerDrafts[assignmentClientKey] || "").trim()
           : null,
     }),
   });
@@ -1067,7 +1077,7 @@ async function submitAssignment(assignmentId, sourceLabel) {
     pushToast("error", submitRes.body.message || "Failed to submit assignment.");
     return;
   }
-  state.assignmentSubmissions[assignmentId] = {
+  state.assignmentSubmissions[assignmentClientKey] = {
     submittedAt: now,
     isLate,
     sourceLabel,
@@ -1533,7 +1543,8 @@ function assignmentOverviewView(assignmentsList) {
     ${source
       .map(
         (assignment) => {
-          const submission = state.assignmentSubmissions[assignment.id];
+          const assignmentClientKey = getAssignmentClientKey(assignment);
+          const submission = state.assignmentSubmissions[assignmentClientKey];
           return `
       <article class="card course-tab-card">
         <div class="split">
@@ -1551,9 +1562,9 @@ function assignmentOverviewView(assignmentsList) {
               </div>`
             : ""
         }
-        <button class="button button-secondary" onclick="toggleAssignment('${assignment.id}')">${state.assignmentOpen[assignment.id] ? "Collapse" : "Expand"}</button>
-        <div class="${state.assignmentOpen[assignment.id] ? "" : "hidden"} assignment-detail">
-          ${renderAssignmentBody(assignment)}
+        <button class="button button-secondary" onclick="toggleAssignment('${assignmentClientKey}')">${state.assignmentOpen[assignmentClientKey] ? "Collapse" : "Expand"}</button>
+        <div class="${state.assignmentOpen[assignmentClientKey] ? "" : "hidden"} assignment-detail">
+          ${renderAssignmentBody(assignment, assignmentClientKey)}
         </div>
       </article>
     `;
@@ -1563,8 +1574,8 @@ function assignmentOverviewView(assignmentsList) {
   `;
 }
 
-function renderAssignmentBody(assignment) {
-  const submission = state.assignmentSubmissions[assignment.id];
+function renderAssignmentBody(assignment, assignmentClientKey) {
+  const submission = state.assignmentSubmissions[assignmentClientKey];
   const submissionReceipt = submission
     ? `<div class="submission-receipt ${submission.isLate ? "submission-receipt-late" : "submission-receipt-ok"}">
          <strong>${submission.isLate ? "Submitted Late" : "Submitted Successfully"}</strong>
@@ -1579,14 +1590,14 @@ function renderAssignmentBody(assignment) {
         <p class="muted">Choose one option only and submit your final answer before due time.</p>
       </div>
       <div class="option-grid">
-        <button class="option-btn ${state.selectedMcqOption[assignment.id] === "A. HTML" ? "option-btn-selected" : ""}" onclick="selectMcqOption('${assignment.id}', 'A. HTML')">A. HTML</button>
-        <button class="option-btn ${state.selectedMcqOption[assignment.id] === "B. XAMPP" ? "option-btn-selected" : ""}" onclick="selectMcqOption('${assignment.id}', 'B. XAMPP')">B. XAMPP</button>
-        <button class="option-btn ${state.selectedMcqOption[assignment.id] === "C. VS Code" ? "option-btn-selected" : ""}" onclick="selectMcqOption('${assignment.id}', 'C. VS Code')">C. VS Code</button>
-        <button class="option-btn ${state.selectedMcqOption[assignment.id] === "D. Python" ? "option-btn-selected" : ""}" onclick="selectMcqOption('${assignment.id}', 'D. Python')">D. Python</button>
+        <button class="option-btn ${state.selectedMcqOption[assignmentClientKey] === "A. HTML" ? "option-btn-selected" : ""}" onclick="selectMcqOption('${assignmentClientKey}', 'A. HTML')">A. HTML</button>
+        <button class="option-btn ${state.selectedMcqOption[assignmentClientKey] === "B. XAMPP" ? "option-btn-selected" : ""}" onclick="selectMcqOption('${assignmentClientKey}', 'B. XAMPP')">B. XAMPP</button>
+        <button class="option-btn ${state.selectedMcqOption[assignmentClientKey] === "C. VS Code" ? "option-btn-selected" : ""}" onclick="selectMcqOption('${assignmentClientKey}', 'C. VS Code')">C. VS Code</button>
+        <button class="option-btn ${state.selectedMcqOption[assignmentClientKey] === "D. Python" ? "option-btn-selected" : ""}" onclick="selectMcqOption('${assignmentClientKey}', 'D. Python')">D. Python</button>
       </div>
-      <button class="button button-primary" onclick="submitMcqAnswer('${assignment.id}')">Submit</button>
+      <button class="button button-primary" onclick="submitMcqAnswer('${assignmentClientKey}')">Submit</button>
       ${submissionReceipt}
-      ${commentsBlock(`${assignment.id}-comments`)}
+      ${commentsBlock(`${assignmentClientKey}-comments`)}
     `;
   }
 
@@ -1602,12 +1613,12 @@ function renderAssignmentBody(assignment) {
         <div class="item">index.html</div>
         <div class="item"><a href="sample-materials/group-formation-namelist.xls" target="_blank" rel="noopener noreferrer">Open attached resource (XLS)</a></div>
         <div class="button-row">
-          <button class="button button-primary" onclick="submitAssignment('${assignment.id}', 'Upload file')">Upload</button>
-          <button class="button button-secondary" onclick="submitAssignment('${assignment.id}', 'Mark as Done')">Mark as Done</button>
+          <button class="button button-primary" onclick="submitAssignment('${assignmentClientKey}', 'Upload file')">Upload</button>
+          <button class="button button-secondary" onclick="submitAssignment('${assignmentClientKey}', 'Mark as Done')">Mark as Done</button>
         </div>
       </div>
       ${submissionReceipt}
-      ${commentsBlock(`${assignment.id}-comments`)}
+      ${commentsBlock(`${assignmentClientKey}-comments`)}
     `;
   }
 
@@ -1617,10 +1628,10 @@ function renderAssignmentBody(assignment) {
       <p class="muted">Write a short reflection and submit when complete.</p>
     </div>
     <p>What did you learn today? Write down your review here.</p>
-    <textarea placeholder="Type your answer here." oninput="updateShortAnswerDraft('${assignment.id}', this.value)">${state.shortAnswerDrafts[assignment.id] || ""}</textarea>
-    <button class="button button-primary" onclick="submitAssignment('${assignment.id}', 'Short answer submission')">Submit</button>
+    <textarea placeholder="Type your answer here." oninput="updateShortAnswerDraft('${assignmentClientKey}', this.value)">${state.shortAnswerDrafts[assignmentClientKey] || ""}</textarea>
+    <button class="button button-primary" onclick="submitAssignment('${assignmentClientKey}', 'Short answer submission')">Submit</button>
     ${submissionReceipt}
-    ${commentsBlock(`${assignment.id}-comments`)}
+    ${commentsBlock(`${assignmentClientKey}-comments`)}
   `;
 }
 
