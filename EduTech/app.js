@@ -290,8 +290,9 @@ function hydrateFromBootstrap(payload) {
   if (Array.isArray(d.announcements)) data.announcements = d.announcements;
   if (Array.isArray(d.materials)) data.materials = d.materials;
   if (Array.isArray(d.assignments)) data.assignments = d.assignments;
-  if (Array.isArray(d.forum)) data.forum = d.forum;
-  if (Array.isArray(d.books)) data.books = d.books;
+  if (Array.isArray(d.forum) && d.forum.length) data.forum = d.forum;
+  // 当数据库 books 为空时，保留前端内置示例卡片（含封面图），避免页面看起来“全没了”。
+  if (Array.isArray(d.books) && d.books.length) data.books = d.books;
   if (d.cart && typeof d.cart === "object") state.cart = d.cart;
   state.bootstrapLoaded = true;
 }
