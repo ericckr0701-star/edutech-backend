@@ -979,7 +979,7 @@ async function submitForumReply() {
     pushToast("error", "Please write a reply first.");
     return;
   }
-  const reply = await apiJson("/forum/replies", {
+  let reply = await apiJson("/forum/replies", {
     method: "POST",
     body: JSON.stringify({
       post_id: state.forumReplyTo.post_id,
@@ -987,6 +987,27 @@ async function submitForumReply() {
       content: text,
     }),
   });
+  // 针对前端示例帖（数据库无记录）做兜底：先创建帖子，再重试回复。
+  if (!reply.ok && reply.status === 404 && state.forumReplyTo.title) {
+    const create = await apiJson("/forum/posts", {
+      method: "POST",
+      body: JSON.stringify({
+        title: state.forumReplyTo.title,
+        content: state.forumReplyTo.title,
+      }),
+    });
+    if (create.ok) {
+      state.forumReplyTo.post_id = create.body.post_id || null;
+      reply = await apiJson("/forum/replies", {
+        method: "POST",
+        body: JSON.stringify({
+          post_id: state.forumReplyTo.post_id,
+          post_title: state.forumReplyTo.title,
+          content: text,
+        }),
+      });
+    }
+  }
   if (!reply.ok) {
     pushToast("error", reply.body.message || "Failed to post reply.");
     return;
