@@ -1681,9 +1681,8 @@ function renderCourseTabContent() {
       <div class="material-toolbar">
         <div>
           <h4>Class Materials</h4>
-          <p class="muted">Open files directly or create random sample files for testing.</p>
+          <p class="muted">Open files directly and review course resources by module.</p>
         </div>
-        <button class="button button-secondary" onclick="generateRandomMaterialSample()">Create Random Sample File</button>
       </div>
       ${selectedMaterials.length ? selectedMaterials
         .map(
