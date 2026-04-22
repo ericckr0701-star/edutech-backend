@@ -32,7 +32,7 @@ def get_bootstrap_data(conn, user_id: int):
 
         cursor.execute(
             """
-            SELECT c.course_id, c.title,
+            SELECT c.course_id, c.title, c.category, c.content_type,
                    COALESCE(sp.completion_percent, 0) AS progress
             FROM courses c
             LEFT JOIN student_progress sp
@@ -50,6 +50,8 @@ def get_bootstrap_data(conn, user_id: int):
                 {
                     "id": row["course_id"],
                     "name": row["title"],
+                    "category": row.get("category") or "General",
+                    "contentType": row.get("content_type") or "Mixed",
                     "progress": p,
                     "message": _progress_message(p),
                     "icon": icons[idx % len(icons)],

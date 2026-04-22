@@ -69,10 +69,10 @@ const data = {
   user: { name: "User", email: "123@gmail.com" },
   lecturer: { name: "Dr. Nur Aisyah", avatar: "👩‍🏫" },
   courses: [
-    { name: "Web Technology", progress: 0, message: "Start by today!", icon: "image1.png" },
-    { name: "Public speaking", progress: 100, message: "Incredible!", icon: "image2.png" },
-    { name: "Presentation skill", progress: 90, message: "Almost there!", icon: "image3.png" },
-    { name: "Calculus", progress: 24, message: "Keep it up!", icon: "image4.png" },
+    { name: "Web Technology", category: "Computer Science", contentType: "Mixed", progress: 0, message: "Start by today!", icon: "image1.png" },
+    { name: "Public speaking", category: "Communication", contentType: "Lecture", progress: 100, message: "Incredible!", icon: "image2.png" },
+    { name: "Presentation skill", category: "Communication", contentType: "Workshop", progress: 90, message: "Almost there!", icon: "image3.png" },
+    { name: "Calculus", category: "Mathematics", contentType: "Lecture", progress: 24, message: "Keep it up!", icon: "image4.png" },
   ],
   notifications: [
     {
@@ -413,6 +413,15 @@ function setCourse(courseName) {
   state.selectedCourse = courseName;
   state.postLoginPage = "courseDetail";
   render();
+}
+
+function getSelectedCourse() {
+  return data.courses.find((c) => c.name === state.selectedCourse) || null;
+}
+
+function getSelectedCourseId() {
+  const selected = getSelectedCourse();
+  return selected && selected.id ? selected.id : null;
 }
 
 async function login(event) {
@@ -1461,9 +1470,10 @@ function coursesView() {
   `;
 }
 
-function assignmentOverviewView() {
+function assignmentOverviewView(assignmentsList) {
+  const source = Array.isArray(assignmentsList) ? assignmentsList : data.assignments;
   return `
-    ${data.assignments
+    ${source
       .map(
         (assignment) => {
           const submission = state.assignmentSubmissions[assignment.id];
@@ -1596,8 +1606,22 @@ function commentsBlock(key) {
 }
 
 function renderCourseTabContent() {
+  const selectedCourseId = getSelectedCourseId();
+  const selectedAnnouncements = selectedCourseId
+    ? data.announcements.filter((a) => Number(a.course_id) === Number(selectedCourseId))
+    : data.announcements;
+  const selectedMaterials = selectedCourseId
+    ? data.materials.filter((m) => Number(m.course_id) === Number(selectedCourseId))
+    : data.materials;
+  const selectedAssignments = selectedCourseId
+    ? data.assignments.filter((a) => Number(a.course_id) === Number(selectedCourseId))
+    : data.assignments;
+
   if (state.courseTab === "Announcements") {
-    return data.announcements
+    if (!selectedAnnouncements.length) {
+      return `<article class="card course-tab-card"><p class="muted">No announcements for this module yet.</p></article>`;
+    }
+    return selectedAnnouncements
       .map(
         (a) => `
         <article class="card course-tab-card compact-item">
@@ -1661,7 +1685,7 @@ function renderCourseTabContent() {
         </div>
         <button class="button button-secondary" onclick="generateRandomMaterialSample()">Create Random Sample File</button>
       </div>
-      ${data.materials
+      ${selectedMaterials.length ? selectedMaterials
         .map(
           (m) => `
             <article class="card course-tab-card">
@@ -1692,15 +1716,26 @@ function renderCourseTabContent() {
             </article>
           `
         )
-        .join("")}
+        .join("") : `<article class="card course-tab-card"><p class="muted">No lecture notes/materials for this module yet.</p></article>`}
     `;
   }
 
-  return assignmentOverviewView();
+  return assignmentOverviewView(selectedAssignments);
 }
 
 function courseView() {
   const tabs = ["Announcements", "Material", "Assignment"];
+  const selected = getSelectedCourse();
+  const selectedCourseId = getSelectedCourseId();
+  const moduleAnnouncements = selectedCourseId
+    ? data.announcements.filter((a) => Number(a.course_id) === Number(selectedCourseId))
+    : data.announcements;
+  const moduleMaterials = selectedCourseId
+    ? data.materials.filter((m) => Number(m.course_id) === Number(selectedCourseId))
+    : data.materials;
+  const moduleAssignments = selectedCourseId
+    ? data.assignments.filter((a) => Number(a.course_id) === Number(selectedCourseId))
+    : data.assignments;
   return `
     <div class="page wide-page fixed-frame">
     ${nav()}
@@ -1709,7 +1744,7 @@ function courseView() {
         <div class="split">
           <div>
             <h2>${state.selectedCourse}</h2>
-            <p class="muted">Web Technology · Semester 2</p>
+            <p class="muted">${selected?.category || "General"} · ${selected?.contentType || "Mixed"}</p>
           </div>
           <div class="lecturer-head">
             <span class="lecturer-avatar">${data.lecturer.avatar}</span>
@@ -1730,10 +1765,10 @@ function courseView() {
             .join("")}
         </div>
         <div class="course-detail-kpis">
-          <div class="kpi-item"><span class="kpi-label">Course Progress</span><strong>68%</strong></div>
-          <div class="kpi-item"><span class="kpi-label">Materials</span><strong>${data.materials.length}</strong></div>
-          <div class="kpi-item"><span class="kpi-label">Assignments</span><strong>${data.assignments.length}</strong></div>
-          <div class="kpi-item"><span class="kpi-label">Announcements</span><strong>${data.announcements.length}</strong></div>
+          <div class="kpi-item"><span class="kpi-label">Course Progress</span><strong>${selected?.progress ?? 0}%</strong></div>
+          <div class="kpi-item"><span class="kpi-label">Materials</span><strong>${moduleMaterials.length}</strong></div>
+          <div class="kpi-item"><span class="kpi-label">Assignments</span><strong>${moduleAssignments.length}</strong></div>
+          <div class="kpi-item"><span class="kpi-label">Announcements</span><strong>${moduleAnnouncements.length}</strong></div>
         </div>
         <div class="course-detail-body">
           <aside class="course-detail-aside">
