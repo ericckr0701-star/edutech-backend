@@ -582,10 +582,11 @@ function toggleNotifications() {
 }
 
 function toggleAnnouncementComment(id) {
+  const wasOpen = !!state.announcementCommentOpen[id];
   Object.keys(state.announcementCommentOpen).forEach((key) => {
     state.announcementCommentOpen[key] = false;
   });
-  state.announcementCommentOpen[id] = !state.announcementCommentOpen[id];
+  state.announcementCommentOpen[id] = !wasOpen;
   render();
 }
 
@@ -1691,9 +1692,19 @@ function renderCourseTabContent() {
   const selectedMaterials = selectedMaterialsRaw.length
     ? selectedMaterialsRaw
     : seedCourseContent.materials;
-  const selectedAssignments = selectedAssignmentsRaw.length
-    ? selectedAssignmentsRaw
-    : seedCourseContent.assignments;
+  // assignments 使用“后端优先 + seed 补齐”策略，避免某课程只显示 1 条题目。
+  const selectedAssignmentsMap = new Map();
+  selectedAssignmentsRaw.forEach((a) => {
+    const k = String(a.title || a.id || Math.random());
+    selectedAssignmentsMap.set(k, a);
+  });
+  seedCourseContent.assignments.forEach((a) => {
+    const k = String(a.title || a.id || Math.random());
+    if (!selectedAssignmentsMap.has(k)) {
+      selectedAssignmentsMap.set(k, a);
+    }
+  });
+  const selectedAssignments = Array.from(selectedAssignmentsMap.values());
 
   if (state.courseTab === "Announcements") {
     return selectedAnnouncements
@@ -1816,9 +1827,18 @@ function courseView() {
   const moduleMaterials = moduleMaterialsRaw.length
     ? moduleMaterialsRaw
     : seedCourseContent.materials;
-  const moduleAssignments = moduleAssignmentsRaw.length
-    ? moduleAssignmentsRaw
-    : seedCourseContent.assignments;
+  const moduleAssignmentsMap = new Map();
+  moduleAssignmentsRaw.forEach((a) => {
+    const k = String(a.title || a.id || Math.random());
+    moduleAssignmentsMap.set(k, a);
+  });
+  seedCourseContent.assignments.forEach((a) => {
+    const k = String(a.title || a.id || Math.random());
+    if (!moduleAssignmentsMap.has(k)) {
+      moduleAssignmentsMap.set(k, a);
+    }
+  });
+  const moduleAssignments = Array.from(moduleAssignmentsMap.values());
   return `
     <div class="page wide-page fixed-frame">
     ${nav()}
