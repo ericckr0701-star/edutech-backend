@@ -1045,11 +1045,10 @@ function getAssignmentClientKey(assignment) {
 }
 
 function findAssignmentByClientKey(clientKey) {
-  const assignmentSource =
-    Array.isArray(data.assignments) && data.assignments.length
-      ? data.assignments
-      : seedCourseContent.assignments;
-  return assignmentSource.find((a) => getAssignmentClientKey(a) === clientKey) || null;
+  const mergedAll = mergeAssignmentsPreferSeed(data.assignments);
+  const hit = mergedAll.find((a) => getAssignmentClientKey(a) === clientKey);
+  if (hit) return hit;
+  return seedCourseContent.assignments.find((a) => getAssignmentClientKey(a) === clientKey) || null;
 }
 
 function mergeAssignmentsPreferSeed(assignmentsRaw) {
