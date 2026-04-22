@@ -1038,7 +1038,11 @@ function formatSubmittedTime(ts) {
 }
 
 async function submitAssignment(assignmentId, sourceLabel) {
-  const assignment = data.assignments.find((a) => a.id === assignmentId);
+  const assignmentSource =
+    Array.isArray(data.assignments) && data.assignments.length
+      ? data.assignments
+      : seedCourseContent.assignments;
+  const assignment = assignmentSource.find((a) => a.id === assignmentId);
   if (!assignment) return;
   if (assignment.type === "short" && !String(state.shortAnswerDrafts[assignmentId] || "").trim()) {
     pushToast("error", "Please write your short answer before submitting.");
